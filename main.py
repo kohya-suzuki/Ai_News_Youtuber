@@ -2,6 +2,7 @@ import os
 import json
 import requests
 import gdown
+import datetime
 from moviepy import ImageClip, TextClip, CompositeVideoClip
 # --- MoviePy v2.x 用の設定 ---
 # ImageMagickのパスを環境変数に直接セットします
@@ -39,8 +40,11 @@ def get_script_from_sheets():
     
     # 今日の曜日を取得
     day_labels = ["日", "月", "火", "水", "木", "金", "土"]
-    today_label = day_labels[datetime.now().weekday() + 1] # Pythonは月曜=0のため調整
+    today_index = datetime.datetime.now().weekday()
+    today_label = day_labels[today_index]
+    # today_label = day_labels[datetime.now().weekday() + 1] # Pythonは月曜=0のため調整
     if datetime.now().weekday() == 6: today_label = "日" # 日曜の調整
+    print(f"Targeting day: {today_label}") # ログで確認用
 
     for row in rows:
         if row[0] == today_label:
@@ -60,7 +64,6 @@ def create_video(script_text):
         from PIL import Image
         img = Image.new('RGB', (1280, 720), color = (73, 109, 137))
         img.save(bg_image)
-
     clip = ImageClip(bg_image).set_duration(15)
     
     # 日本語フォントを指定して文字を合成
