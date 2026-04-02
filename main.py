@@ -56,6 +56,25 @@ def get_script_from_sheets():
     raise ValueError(f"シートに '{today_label}' という曜日が見つかりません。")
 
 def create_video(script_text):
+    # --- フォントパスの確定 ---
+    # Ubuntuの標準的なNoto Sans CJKのパスを複数候補に挙げます
+    possible_fonts = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+        "NotoSansCJK-Regular" # 名前指定
+    ]
+    font_to_use = None
+    for f in possible_fonts:
+        if os.path.exists(f):
+            font_to_use = f
+            break
+    
+    if not font_to_use:
+        # 万が一見つからない場合は、システムフォントに任せる（エラー回避）
+        font_to_use = "DejaVu-Sans-Book"
+        print("Warning: Noto Font not found, using fallback.")
+    
     """動画ファイルを合成"""
     bg_image = "base_image.jpg"
     
@@ -75,7 +94,7 @@ def create_video(script_text):
         text=script_text,
         font_size=40,
         color='white',
-        font=FONT_PATH,
+        font=font_to_use, # 確定したパスを使用
         method='caption',
         size=(1100, None)
     ).with_duration(10).with_position('center') 
