@@ -6,33 +6,30 @@ import datetime
 from moviepy import ImageClip, TextClip, CompositeVideoClip
 from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
+# OSにインストールしたNoto Sans CJKのパスを指定
+FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
 
 # --- 環境設定 ---
-# 1. スプレッドシートIDをあなたのものに書き換えてください
 SPREADSHEET_ID = "1o4XVvg34BCCNyuIp5_QwZadkgkfu4rWeog50qr3Lnoo" # スプレッドシートのURLにある文字列
 # 2. ImageMagickのパス設定（MoviePy v2.x用）
 os.environ["IMAGEMAGICK_BINARY"] = "/usr/bin/convert"
 
 FONT_URL = "https://github.com/googlefonts/noto-fonts/raw/main/unhinted/otf/NotoSansJP/NotoSansJP-Bold.otf"
-FONT_PATH = "NotoSansJP-Bold.otf" # 拡張子を .otf に変更
+FONT_PATH = "NotoSansJP-Bold.otf"
 
 def setup_assets():
-    """日本語フォントを確実にダウンロード"""
-    if os.path.exists(FONT_PATH):
-        # 壊れている可能性があるので、一度消して再取得するのも手です
-        if os.path.getsize(FONT_PATH) < 1000: # 1KB以下なら壊れていると判断
-            os.remove(FONT_PATH)
+    pass
 
-    if not os.path.exists(FONT_PATH):
-        print(f"Downloading Japanese font from {FONT_URL}...")
-        response = requests.get(FONT_URL, stream=True)
-        if response.status_code == 200:
-            with open(FONT_PATH, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=128):
-                    f.write(chunk)
-            print("Font download complete.")
-        else:
-            raise Exception(f"Font download failed with status {response.status_code}")
+def create_video(script_text):
+    # テキスト設定
+    txt_clip = TextClip(
+        text=script_text,
+        font_size=40,
+        color='white',
+        font=FONT_PATH, # OSのフォントを参照
+        method='caption',
+        size=(1100, None)
+    ).with_duration(10).with_position('center')
 
 def get_script_from_sheets():
     """スプレッドシートから今日の台本を取得"""
@@ -78,7 +75,7 @@ def create_video(script_text):
         text=script_text,
         font_size=40,
         color='white',
-        font=FONT_PATH, # ここが .otf を指すように
+        font=FONT_PATH,
         method='caption',
         size=(1100, None)
     ).with_duration(10).with_position('center') 
