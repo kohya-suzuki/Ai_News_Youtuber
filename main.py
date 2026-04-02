@@ -49,11 +49,16 @@ def get_script_from_sheets():
     print(f"Searching for: {today_label}")
 
     for row in rows:
-        if len(row) > 0 and row[0] == today_label:
+        # A列が一致し、かつD列(index 3)までデータが存在するかチェック
+        if len(row) > 3 and row[0] == today_label:
             script = row[3] # D列: 台本
-            print(f"Found script for {today_label}")
-            return script
-    raise ValueError(f"シートに '{today_label}' という曜日が見つかりません。")
+            if script: # 台本が空文字でないか
+                print(f"Found script for {today_label}")
+                return script
+    
+    # 見つからない場合の詳細ログ
+    print(f"Debug: Rows found in sheet: {rows}")
+    raise ValueError(f"シートの '{today_label}' 行に台本(D列)が見つかりません。GASは実行されましたか？")
 
 def create_video(script_text):
     # --- フォントパスの確定 ---
