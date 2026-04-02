@@ -42,6 +42,9 @@ def get_script_from_sheets():
             return row[3] # D列（台本）を返す
     return "台本が見つかりませんでした。"
 
+from moviepy.config import change_settings
+change_settings({"IMAGEMAGICK_BINARY": r"/usr/bin/convert"})
+
 def create_video(script_text):
     # 背景画像はGitHubに上げておくか、GCSから落とす必要があります。
     # ここでは仮にカレントディレクトリにある想定です。
