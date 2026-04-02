@@ -1,24 +1,23 @@
+
 import os
 import json
 import requests
-import gdown
 import datetime
 from moviepy import ImageClip, TextClip, CompositeVideoClip
-
-# change_settings は使わず、環境変数を直接セットします
-os.environ["IMAGEMAGICK_BINARY"] = "/usr/bin/convert"
 from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
-from datetime import datetime
 
-# --- 設定 ---
+# --- 環境設定 ---
+# 1. スプレッドシートIDをあなたのものに書き換えてください
 SPREADSHEET_ID = "1o4XVvg34BCCNyuIp5_QwZadkgkfu4rWeog50qr3Lnoo" # スプレッドシートのURLにある文字列
-BUCKET_NAME = "youtube-ai-news-resouses"
+# 2. ImageMagickのパス設定（MoviePy v2.x用）
+os.environ["IMAGEMAGICK_BINARY"] = "/usr/bin/convert"
+
 FONT_URL = "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansJP/NotoSansJP-Bold.ttf"
 FONT_PATH = "NotoSansJP-Bold.ttf"
 
 def setup_assets():
-    # 日本語フォントがないと文字化けするのでダウンロード
+    """日本語フォントをダウンロード"""
     if not os.path.exists(FONT_PATH):
         print("Downloading Japanese font...")
         response = requests.get(FONT_URL)
@@ -26,64 +25,62 @@ def setup_assets():
             f.write(response.content)
 
 def get_script_from_sheets():
-    # GitHub Secretsに登録したGCP_SA_KEY(JSON)を使ってシートを読み取る
+    """スプレッドシートから今日の台本を取得"""
     info = json.loads(os.environ.get("GCP_SA_KEY"))
     creds = Credentials.from_service_account_info(info, scopes=['https://www.googleapis.com/auth/spreadsheets.readonly'])
     service = build('sheets', 'v4', credentials=creds)
     
-    # シートのデータを取得（A列〜F列）
-    range_name = 'シート1!A1:F10'
-    result = service.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=range_name).execute()
+    # A列〜F列を取得
+    result = service.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range='シート1!A1:F20').execute()
     rows = result.get('values', [])
     
-    # 日本時間での曜日判定
-    # Python標準の weekday(): 0=月, 1=火, 2=水, 3=木, 4=金, 5=土, 6=日
+    # 日本時間 (UTC+9) で曜日を判定
     day_labels = ["月", "火", "水", "木", "金", "土", "日"]
-    
-    # サーバーの時間を日本時間に調整 (+9時間)
     now_jst = datetime.datetime.utcnow() + datetime.timedelta(hours=9)
     today_label = day_labels[now_jst.weekday()]
     
-    print(f"Targeting day: {today_label}")
+    print(f"Searching for: {today_label}")
 
     for row in rows:
-        if row[0] == today_label:
-            print(f"Script found: {row[3][:20]}...")
-            return row[3] # D列（台本）
-            
-    raise ValueError(f"台本が見つかりませんでした。曜日の表記が '{today_label}' と一致しているか確認してください。")
-
-from moviepy.config import change_settings
-change_settings({"IMAGEMAGICK_BINARY": r"/usr/bin/convert"})
+        if len(row) > 0 and row[0] == today_label:
+            script = row[3] # D列: 台本
+            print(f"Found script for {today_label}")
+            return script
+    raise ValueError(f"シートに '{today_label}' という曜日が見つかりません。")
 
 def create_video(script_text):
-    # 背景画像はGitHubに上げておくか、GCSから落とす必要があります。
-    # ここでは仮にカレントディレクトリにある想定です。
-    bg_image = "base_image.jpg" 
+    """動画ファイルを合成"""
+    bg_image = "base_image.jpg"
     
+    # 画像がない場合の予備処理
     if not os.path.exists(bg_image):
-        # 画像がない場合、黒背景で代用（テスト用）
         from PIL import Image
-        img = Image.new('RGB', (1280, 720), color = (73, 109, 137))
+        print("base_image.jpg not found. Creating placeholder...")
+        img = Image.new('RGB', (1280, 720), color=(30, 30, 30))
         img.save(bg_image)
-    clip = ImageClip(bg_image).set_duration(15)
+
+    # 背景設定
+    clip = ImageClip(bg_image).with_duration(10)
     
-    # 日本語フォントを指定して文字を合成
+    # テキスト設定（日本語フォント指定）
     txt_clip = TextClip(
-        script_text, 
-        fontsize=40, 
-        color='white', 
-        font=FONT_PATH, 
-        method='caption', 
-        size=(1100, None),
-        align='Center'
-    ).set_pos('center').set_duration(15)
+        text=script_text,
+        font_size=40,
+        color='white',
+        font=FONT_PATH,
+        method='caption',
+        size=(1100, None)
+    ).with_duration(10).with_position('center')
     
     video = CompositeVideoClip([clip, txt_clip])
     video.write_videofile("output.mp4", fps=24, codec="libx264")
+    print("Video creation successful: output.mp4")
 
 if __name__ == "__main__":
     setup_assets()
-    script = get_script_from_sheets()
-    print(f"Creating video for: {script[:20]}...")
-    create_video(script)
+    try:
+        script = get_script_from_sheets()
+        create_video(script)
+    except Exception as e:
+        print(f"Error occurred: {e}")
+        exit(1)
