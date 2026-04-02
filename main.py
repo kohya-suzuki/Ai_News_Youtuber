@@ -31,7 +31,7 @@ def get_script_from_sheets():
     service = build('sheets', 'v4', credentials=creds)
     
     # A列〜F列を取得
-    result = service.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range='シート1!A1:F20').execute()
+    result = service.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range='台本一覧!A1:F20').execute()
     rows = result.get('values', [])
     
     # 日本時間 (UTC+9) で曜日を判定
