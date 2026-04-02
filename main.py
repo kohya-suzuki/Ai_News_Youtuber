@@ -2,7 +2,7 @@ import os
 import json
 import requests
 import gdown
-from moviepy.editor import ImageClip, TextClip, CompositeVideoClip
+from moviepy import ImageClip, TextClip, CompositeVideoClip
 from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
 from datetime import datetime
