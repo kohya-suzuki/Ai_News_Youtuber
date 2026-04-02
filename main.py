@@ -4,14 +4,12 @@ import requests
 import gdown
 import datetime
 from moviepy import ImageClip, TextClip, CompositeVideoClip
-# --- MoviePy v2.x 用の設定 ---
-# ImageMagickのパスを環境変数に直接セットします
+
+# change_settings は使わず、環境変数を直接セットします
 os.environ["IMAGEMAGICK_BINARY"] = "/usr/bin/convert"
 from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
 from datetime import datetime
-
-
 
 # --- 設定 ---
 SPREADSHEET_ID = "1o4XVvg34BCCNyuIp5_QwZadkgkfu4rWeog50qr3Lnoo" # スプレッドシートのURLにある文字列
@@ -38,18 +36,22 @@ def get_script_from_sheets():
     result = service.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=range_name).execute()
     rows = result.get('values', [])
     
-    # 今日の曜日を取得
-    day_labels = ["日", "月", "火", "水", "木", "金", "土"]
-    today_index = datetime.datetime.now().weekday()
-    today_label = day_labels[today_index]
-    # today_label = day_labels[datetime.now().weekday() + 1] # Pythonは月曜=0のため調整
-    if datetime.now().weekday() == 6: today_label = "日" # 日曜の調整
-    print(f"Targeting day: {today_label}") # ログで確認用
+    # 日本時間での曜日判定
+    # Python標準の weekday(): 0=月, 1=火, 2=水, 3=木, 4=金, 5=土, 6=日
+    day_labels = ["月", "火", "水", "木", "金", "土", "日"]
+    
+    # サーバーの時間を日本時間に調整 (+9時間)
+    now_jst = datetime.datetime.utcnow() + datetime.timedelta(hours=9)
+    today_label = day_labels[now_jst.weekday()]
+    
+    print(f"Targeting day: {today_label}")
 
     for row in rows:
         if row[0] == today_label:
-            return row[3] # D列（台本）を返す
-    return "台本が見つかりませんでした。"
+            print(f"Script found: {row[3][:20]}...")
+            return row[3] # D列（台本）
+            
+    raise ValueError(f"台本が見つかりませんでした。曜日の表記が '{today_label}' と一致しているか確認してください。")
 
 from moviepy.config import change_settings
 change_settings({"IMAGEMAGICK_BINARY": r"/usr/bin/convert"})
