@@ -3,9 +3,14 @@ import json
 import requests
 import gdown
 from moviepy import ImageClip, TextClip, CompositeVideoClip
+# --- MoviePy v2.x 用の設定 ---
+# ImageMagickのパスを環境変数に直接セットします
+os.environ["IMAGEMAGICK_BINARY"] = "/usr/bin/convert"
 from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+
+
 
 # --- 設定 ---
 SPREADSHEET_ID = "1o4XVvg34BCCNyuIp5_QwZadkgkfu4rWeog50qr3Lnoo" # スプレッドシートのURLにある文字列
