@@ -1,0 +1,29 @@
+name: Daily AI News Video Creator
+
+on:
+  schedule:
+    - cron: '0 23 * * *' # 日本時間 朝8時ごろ
+  workflow_dispatch: # 手動実行ボタン
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get install ffmpeg
+          pip install -r requirements.txt
+
+      - name: Run Video Generator
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: python main.py
