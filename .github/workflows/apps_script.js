@@ -31,7 +31,7 @@ function generateDailyNewsScript() {
     const payload = {
         "contents": [{
             "parts": [{
-                "text": "最新のAI関連ニュースを1つ選び、以下のJSON形式のみで出力してください。余計な説明文は不要です。\n\n" +
+                "text": "優先して2026年における今月の最新のAI関連ニュースを1つ選び、以下のJSON形式のみで出力してください。余計な説明文は不要です。\n\n" +
                     "{\n" +
                     "  \"ai_model\": \"Gemini 2.5 Flash\",\n" +
                     "  \"title\": \"ニュースのタイトル\",\n" +
@@ -40,7 +40,7 @@ function generateDailyNewsScript() {
                     "  \"summary_sentence\": \"要約1文\",\n" +
                     "  \"headline_short\": \"短い見出し(10文字以内)\",\n" +
                     "  \"image_keyword\": \"英語の画像検索キーワード\",\n" +
-                    "  \"complaint\": \"エンジニアが言いそうな皮肉な愚痴\"\n" +
+                    "  \"complaint\": \"AIが考える人間に対しての愚痴(溜め息などは不要)\"\n" +
                     "}"
             }]
         }]
