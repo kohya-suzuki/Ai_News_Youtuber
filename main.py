@@ -1,148 +1,167 @@
-
-
-
 import os
 import re
 import requests
 import json
-from moviepy import ImageClip, TextClip, CompositeVideoClip, ColorClip, vfx
+from moviepy import ImageClip, TextClip, CompositeVideoClip, vfx
 from PIL import Image, ImageDraw
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
 # --- 設定（微調整ポイント） ---
-PEXELS_API_KEY = os.getenv("N86mofyZkk3D1qcI5MsdGK43NCflaHGy7yV2NfR2r62y7KgIMdAXhV2b")
-SPREADSHEET_ID = os.getenv("1o4XVvg34BCCNyuIp5_QwZadkgkfu4rWeog50qr3Lnoo")
-FONT_PATH = "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc"
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
+SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
 
-# ロボットの目の座標 (base_image.jpg の左上からのピクセル数)
+# Mac用の日本語フォントパス（ヒラギノ角ゴ W6）
+FONT_PATH = "/System/Library/Fonts/Hints/Hiragino Sans GB W6.otf" 
+if not os.path.exists(FONT_PATH):
+    FONT_PATH = "Arial" # 万が一無い場合のフォールバック
+
+# ロボットの目の座標 (base_ai_robot.jpg の左上からのピクセル数)
 EYE_LEFT_POS = (740, 435) 
 EYE_RIGHT_POS = (775, 435)
 EYE_SIZE = 12
 
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
-COL_WIDTH = SCREEN_WIDTH // 3
 
 # --- 1. 閉じ目画像を生成 ---
 def create_closed_eye_image(base_img_path):
+    closed_path = "closed_eye.jpg"
+    if os.path.exists(closed_path):
+        return closed_path
+        
     with Image.open(base_img_path) as img:
         img = img.convert("RGB")
         draw = ImageDraw.Draw(img)
-        bg_color = img.getpixel((EYE_LEFT_POS[0], EYE_LEFT_POS[1] - 30)) 
+        # 目の少し上の色をサンプリングして塗りつぶす（擬似的に目を閉じる）
+        bg_color = img.getpixel((EYE_LEFT_POS[0], EYE_LEFT_POS[1] - 20)) 
         draw.ellipse([EYE_LEFT_POS[0]-EYE_SIZE, EYE_LEFT_POS[1]-EYE_SIZE, 
                       EYE_LEFT_POS[0]+EYE_SIZE, EYE_LEFT_POS[1]+EYE_SIZE], fill=bg_color)
         draw.ellipse([EYE_RIGHT_POS[0]-EYE_SIZE, EYE_RIGHT_POS[1]-EYE_SIZE, 
                       EYE_RIGHT_POS[0]+EYE_SIZE, EYE_RIGHT_POS[1]+EYE_SIZE], fill=bg_color)
-        img.save("closed_eye.jpg")
-    return "closed_eye.jpg"
+        img.save(closed_path)
+    return closed_path
 
 # --- 2. Pexels画像取得 ---
-def get_pexels_image(keyword, index):
+def get_pexels_image(keyword):
+    if not PEXELS_API_KEY:
+        print("警告: PEXELS_API_KEY が設定されていません。デフォルト画像を使用します。")
+        return "base_ai_robot.jpg"
+        
     headers = {"Authorization": PEXELS_API_KEY}
     url = f"https://api.pexels.com/v1/search?query={keyword}&per_page=1"
     try:
         res = requests.get(url, headers=headers).json()
         img_url = res['photos'][0]['src']['large']
         img_data = requests.get(img_url).content
-        path = f"news_{index}.jpg"
+        path = "downloaded_news.jpg"
         with open(path, 'wb') as f:
             f.write(img_data)
         return path
-    except:
-        return "base_image.jpg" # 失敗時はデフォルト
+    except Exception as e:
+        print(f"Pexels画像取得失敗: {e}。デフォルト画像を使用します。")
+        return "base_ai_robot.jpg"
 
-# --- 3. スクリプト解析 ---
-def parse_script(full_script):
-    parts = re.split(r'\[WAIT(\d+\.?\d*)\]', full_script)
-    clean_text = ""
-    timing_points = [0.0]
-    current_time = 0
-    
-    # 読み上げ速度: 1秒間に5文字と仮定してタイミングを計算
-    for i in range(0, len(parts), 2):
-        text_part = parts[i]
-        clean_text += text_part
-        duration = len(text_part) / 5.0
-        current_time += duration
-        timing_points.append(current_time)
-        if i + 1 < len(parts):
-            wait_time = float(parts[i+1])
-            current_time += wait_time
-            timing_points.append(current_time)
-            
-    return clean_text, timing_points, current_time
+# --- 3. 台本の読み上げ時間計算 ---
+def calculate_duration(full_script):
+    # 読み上げ速度: 1秒間に約5文字と仮定して全体の長さを計算
+    # ※ 本来はここで音声ファイル（gTTS等）を生成し、その実時間を取るのがベスト。
+    # ※ 今回は仮の動画長として計算（後ほど音声合成を組み込む際に実時間に置き換えます）
+    clean_text = re.sub(r'\[.*?\]', '', full_script) # タグを消去
+    total_duration = max(len(clean_text) / 5.0, 10.0) # 最低10秒保証
+    return total_duration
 
-# --- 4. メイン合成 ---
+# --- 4. メイン動画合成 ---
 def create_video(row_data):
-    # row_data: [取得日時, 動画ID, AIモデル名, 台本, 要約リスト, 画像KW, 背景パス, ...]
+    # 列順定義 (GAS側の一致確認)
+    # A:日時, B:曜日, C:モデル, D:台本, E:要約, F:見出し, G:画像KW, H:YouTubeURL, I:タイトル, J:元URL, K:愚痴
     ai_name = row_data[2]
     full_script = row_data[3]
-    summaries = row_data[4].split('\n')
-    keywords = row_data[5].split(',')
-    
-    # 修正ポイント：特定のファイル名ではなく、共通のベース画像を指定
-    bg_path = "base_ai_robot.jpg" 
+    summary_text = row_data[4]
+    headline_text = row_data[5]
+    image_keyword = row_data[6]
+    complaint_text = row_data[10] if len(row_data) > 10 else "エンジニアの独り言"
 
+    bg_path = "base_ai_robot.jpg"
     if not os.path.exists(bg_path):
-        # 万が一ファイル名が違っても動くように、以前の base_image.jpg も予備で残す
-        bg_path = "base_image.jpg" if os.path.exists("base_image.jpg") else ""
+        raise Exception(f"背景画像 {bg_path} がディレクトリに見つかりません。")
 
-    if not bg_path:
-        raise Exception("背景画像 (base_ai_robot.jpg) が見つかりません。")
+    total_duration = calculate_duration(full_script)
+    print(f"想定動画時間: {total_duration:.1f} 秒")
 
-    clean_text, timings, total_duration = parse_script(full_script)
-    
     # 背景（じわじわズーム）
-    bg = ImageClip(bg_path).with_duration(total_duration).with_effects([vfx.Resize(lambda t: 1 + 0.02 * t / total_duration)])
+    bg = ImageClip(bg_path).with_duration(total_duration).with_effects([
+        vfx.Resize(lambda t: 1 + 0.01 * t / total_duration)
+    ])
 
-    # 瞬き（ベース画像を使って閉じ目を作成）
+    # 瞬きロジックの補完 (4秒に1回、0.15秒間目を閉じる)
     closed_path = create_closed_eye_image(bg_path)
-
-    # Powered by (頭上)
-    pwr_text = TextClip(text=f"Powered by {ai_name}", font_size=30, color='gray', font=FONT_PATH).with_position((720, 350)).with_duration(total_duration)
-
-    # 左側：要約リスト / 中央：関連画像
-    news_elements = []
-    # WAITタグの並びからニュース1,2,3の開始時間を特定 (テンプレートの[WAIT]位置に依存)
-    # 挨拶[WAIT0.5](1) -> 愚痴[WAIT1.0](3) -> ニュース1開始
-    news_starts = [timings[4], timings[8], timings[12]] 
+    blink_clips = []
+    blink_interval = 4.0
+    blink_duration = 0.15
     
-    for i, summary in enumerate(summaries[:3]):
-        y_pos = 150 + (i * 120)
-        start_t = news_starts[i]
-        end_t = news_starts[i+1] if i < 2 else total_duration
+    t = 2.0
+    while t < total_duration:
+        blink = ImageClip(closed_path).with_start(t).with_duration(blink_duration)
+        blink_clips.append(blink)
+        t += blink_interval
 
-        # 通常の要約文
-        base_txt = TextClip(text=f"  {summary}", font_size=24, color='white', font=FONT_PATH, size=(COL_WIDTH-60, None), method='caption').with_position((30, y_pos)).with_duration(total_duration).with_opacity(0.4)
-        news_elements.append(base_txt)
-        
-        # 強調（黄色 + ▶︎）
-        active_txt = TextClip(text=f"▶ {summary}", font_size=24, color='yellow', font=FONT_PATH, size=(COL_WIDTH-60, None), method='caption').with_position((30, y_pos)).with_start(start_t).with_duration(end_t - start_t)
-        news_elements.append(active_txt)
+    # AIモデル名表示 (ロボットの頭上付近)
+    pwr_text = TextClip(text=f"Powered by {ai_name}", font_size=24, color='gray', font=FONT_PATH)\
+        .with_position((680, 320)).with_duration(total_duration)
 
-        # 中央画像
-        img_path = get_pexels_image(keywords[i].strip(), i)
-        news_img = ImageClip(img_path).with_size(width=COL_WIDTH-60).with_position('center').with_start(start_t).with_duration(end_t - start_t).with_effects([vfx.FadeIn(0.5)])
-        news_elements.append(news_img)
+    # 画面上部：核心を突く1文（要約リスト）
+    summary_clip = TextClip(text=summary_text, font_size=32, color='white', font=FONT_PATH, size=(1200, None), method='caption')\
+        .with_position(('center', 40)).with_duration(total_duration)
 
-    final_video = CompositeVideoClip([bg] + blink_clips + [pwr_text] + news_elements, size=(SCREEN_WIDTH, SCREEN_HEIGHT))
-    final_video.write_videofile("output.mp4", fps=24, codec="libx264")
+    # 画面左側：短い見出し
+    headline_clip = TextClip(text=f"【{headline_text}】", font_size=40, color='yellow', font=FONT_PATH, size=(400, None), method='caption')\
+        .with_position((50, 200)).with_duration(total_duration)
+
+    # 画面中央：Pexelsから取得したニュース関連画像
+    img_path = get_pexels_image(image_keyword)
+    news_img = ImageClip(img_path).with_size(width=450)\
+        .with_position(('center', 180)).with_duration(total_duration).with_effects([vfx.FadeIn(0.5)])
+
+    # 画面下部：エンジニアの愚痴（後半10秒間だけ表示する演出）
+    complaint_start = max(0.0, total_duration - 10.0)
+    complaint_clip = TextClip(text=f"中の人の愚痴:\n{complaint_text}", font_size=24, color='orange', font=FONT_PATH, size=(1000, None), method='caption')\
+        .with_position(('center', 600)).with_start(complaint_start).with_duration(total_duration - complaint_start)
+
+    # 全てをレイヤーとして重ね合わせ
+    clips = [bg] + blink_clips + [pwr_text, summary_clip, headline_clip, news_img, complaint_clip]
+    final_video = CompositeVideoClip(clips, size=(SCREEN_WIDTH, SCREEN_HEIGHT))
+    
+    output_filename = "output.mp4"
+    print("動画エンコードを開始します（M4 Proのパワーを見せてもらいましょう）...")
+    final_video.write_videofile(output_filename, fps=24, codec="libx264", audio=False)
+    print(f"動画が正常に出力されました: {output_filename}")
 
 # --- 5. スプレッドシート連携 ---
 def main():
-    # 認証
-    creds_json = json.loads(os.getenv("GCP_SA_KEY"))
+    # 認証情報の読み込み
+    gcp_key_env = os.getenv("GCP_SA_KEY")
+    if not gcp_key_env:
+        print("エラー: GCP_SA_KEY 環境変数が設定されていません。")
+        return
+        
+    try:
+        creds_json = json.loads(gcp_key_env)
+    except json.JSONDecodeError:
+        print("エラー: GCP_SA_KEY のJSONデコードに失敗しました。")
+        return
+
     creds = Credentials.from_service_account_info(creds_json, scopes=["https://www.googleapis.com/auth/spreadsheets"])
     service = build("sheets", "v4", credentials=creds)
     
-    # 2行目を取得
-    range_name = "Main_Scripts!A2:G2"
+    # A2からK2までの11列（最新の1行分）を取得
+    range_name = "Main_Scripts!A2:K2"
+    print("スプレッドシートから最新ニュースを取得中...")
     result = service.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=range_name).execute()
     rows = result.get("values", [])
     
     if not rows:
-        print("No data found.")
+        print("データが見つかりませんでした。")
         return
 
     create_video(rows[0])
