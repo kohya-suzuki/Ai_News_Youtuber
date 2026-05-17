@@ -62,19 +62,30 @@ def get_pexels_image(keyword):
         print(f"Pexels画像取得失敗: {e}。デフォルト画像を使用します。")
         return "base_ai_robot.jpg"
 
-# --- 3. 台本の読み上げ時間計算 ---
-def calculate_duration(full_script):
-    # 読み上げ速度: 1秒間に約5文字と仮定して全体の長さを計算
-    # ※ 本来はここで音声ファイル（gTTS等）を生成し、その実時間を取るのがベスト。
-    # ※ 今回は仮の動画長として計算（後ほど音声合成を組み込む際に実時間に置き換えます）
-    clean_text = re.sub(r'\[.*?\]', '', full_script) # タグを消去
-    total_duration = max(len(clean_text) / 5.0, 10.0) # 最低10秒保証
-    return total_duration
+# --- 3. 自動音声の生成と時間計測 (gTTS) ---
+def generate_voice_and_duration(full_script):
+    # [WAIT0.5] や [WAIT1.0] などのタグを除去してピュアな読み上げテキストを作る
+    clean_text = re.sub(r'\[.*?\]', '', full_script)
+    
+    voice_filename = "news_voice.mp3"
+    print("音声合成エンジン(gTTS)を実行中...")
+    
+    # Googleの音声合成を呼び出してMP3として保存 (日本語: lang='ja')
+    tts = gTTS(text=clean_text, lang='ja', slow=False)
+    tts.save(voice_filename)
+    
+    # 出来上がった音声ファイルの「正確な長さ」をMoviePyを使って取得する
+    from moviepy import AudioFileClip
+    audio_clip = AudioFileClip(voice_filename)
+    actual_duration = audio_clip.duration
+    audio_clip.close() # 読み込みを閉じる
+    
+    print(f"音声ファイルの作成が完了しました。実時間: {actual_duration:.1f} 秒")
+    return voice_filename, actual_duration
 
 # --- 4. メイン動画合成 ---
 def create_video(row_data):
-    # 列順定義 (GAS側の一致確認)
-    # A:日時, B:曜日, C:モデル, D:台本, E:要約, F:見出し, G:画像KW, H:YouTubeURL, I:タイトル, J:元URL, K:愚痴
+    # 列順定義 (A:日時, B:曜日, C:モデル, D:台本, E:要約, F:見出し, G:画像KW, H:YouTube, I:タイトル, J:元URL, K:愚痴)
     ai_name = row_data[2]
     full_script = row_data[3]
     summary_text = row_data[4]
@@ -86,15 +97,15 @@ def create_video(row_data):
     if not os.path.exists(bg_path):
         raise Exception(f"背景画像 {bg_path} がディレクトリに見つかりません。")
 
-    total_duration = calculate_duration(full_script)
-    print(f"想定動画時間: {total_duration:.1f} 秒")
+    # 【変更点】実際に音声を生成し、そのファイルの長さをもとに動画を作る
+    voice_file, total_duration = generate_voice_and_duration(full_script)
 
     # 背景（じわじわズーム）
     bg = ImageClip(bg_path).with_duration(total_duration).with_effects([
         vfx.Resize(lambda t: 1 + 0.01 * t / total_duration)
     ])
 
-    # 瞬きロジックの補完 (4秒に1回、0.15秒間目を閉じる)
+    # 瞬きロジック (4秒に1回、0.15秒間目を閉じる)
     closed_path = create_closed_eye_image(bg_path)
     blink_clips = []
     blink_interval = 4.0
@@ -128,14 +139,32 @@ def create_video(row_data):
     complaint_clip = TextClip(text=f"中の人の愚痴:\n{complaint_text}", font_size=24, color='orange', font=FONT_PATH, size=(1000, None), method='caption')\
         .with_position(('center', 600)).with_start(complaint_start).with_duration(total_duration - complaint_start)
 
+    # 【変更点】生成した音声ファイルをMoviePyのオーディオとして読み込む
+    from moviepy import AudioFileClip
+    audio_clip = AudioFileClip(voice_file)
+
     # 全てをレイヤーとして重ね合わせ
     clips = [bg] + blink_clips + [pwr_text, summary_clip, headline_clip, news_img, complaint_clip]
     final_video = CompositeVideoClip(clips, size=(SCREEN_WIDTH, SCREEN_HEIGHT))
     
+    # 【変更点】動画に音声をセットする
+    final_video = final_video.with_audio(audio_clip)
+    
     output_filename = "output.mp4"
-    print("動画エンコードを開始します（M4 Proのパワーを見せてもらいましょう）...")
-    final_video.write_videofile(output_filename, fps=24, codec="libx264", audio=False)
-    print(f"動画が正常に出力されました: {output_filename}")
+    print("動画・音声の統合エンコードを開始します...")
+    
+    # 【変更点】音声あり(audio=True)で出力し、aac形式でエンコード
+    final_video.write_videofile(
+        output_filename, 
+        fps=24, 
+        codec="libx264", 
+        audio=True, 
+        audio_codec="aac"
+    )
+    
+    # メモリ解放
+    audio_clip.close()
+    print(f"音声付き動画が正常に出力されました: {output_filename}")
 
 # --- 5. スプレッドシート連携 ---
 def main():
