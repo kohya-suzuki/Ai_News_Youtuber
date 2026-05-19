@@ -6,6 +6,7 @@ from moviepy import ImageClip, TextClip, CompositeVideoClip, vfx
 from PIL import Image, ImageDraw
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
+from gtts import gTTS
 
 # --- 設定（微調整ポイント） ---
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
@@ -131,9 +132,12 @@ def create_video(row_data):
 
     # 画面中央：Pexelsから取得したニュース関連画像
     img_path = get_pexels_image(image_keyword)
-    news_img = ImageClip(img_path).with_size(width=450)\
-        .with_position(('center', 180)).with_duration(total_duration).with_effects([vfx.FadeIn(0.5)])
-
+    news_img = ImageClip(img_path)\
+    .resized(width=450)\
+    .with_position(('center', 180))\
+    .with_duration(total_duration)\
+    .with_effects([vfx.FadeIn(0.5)])
+    
     # 画面下部：エンジニアの愚痴（後半10秒間だけ表示する演出）
     complaint_start = max(0.0, total_duration - 10.0)
     complaint_clip = TextClip(text=f"中の人の愚痴:\n{complaint_text}", font_size=24, color='orange', font=FONT_PATH, size=(1000, None), method='caption')\
