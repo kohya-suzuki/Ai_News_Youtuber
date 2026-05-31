@@ -367,10 +367,12 @@ def render_video(final_audio, timeline, total_duration,
 
     # ── ② ロボット画像 ──
     if os.path.exists(ROBOT_BASE_PATH):
-        robot_clip = (ImageClip(ROBOT_BASE_PATH)
-                      .resized(new_size=(1280, 720))
+        # ロボット画像: 高さ720pxにリサイズして右端に配置
+        _robot_tmp = ImageClip(ROBOT_BASE_PATH).resized(height=720)
+        _robot_w   = _robot_tmp.size[0]
+        robot_clip = (_robot_tmp
                       .with_duration(total_duration)
-                      .with_position(lambda t: (0, 0)))
+                      .with_position(lambda t: (1280 - _robot_w, 0)))
         clips.append(robot_clip)
     else:
         print(f"⚠️ ロボット画像が見つかりません: {ROBOT_BASE_PATH}")
@@ -379,11 +381,12 @@ def render_video(final_audio, timeline, total_duration,
     t = 4.0
     while t < total_duration:
         if os.path.exists(ROBOT_BLINK_PATH):
-            blink = (ImageClip(ROBOT_BLINK_PATH)
-                     .resized(new_size=(1280, 720))
+            _blink_tmp = ImageClip(ROBOT_BLINK_PATH).resized(height=720)
+            _blink_w   = _blink_tmp.size[0]
+            blink = (_blink_tmp
                      .with_start(t)
                      .with_duration(0.15)
-                     .with_position(lambda t: (0, 0)))
+                     .with_position(lambda t: (1280 - _blink_w, 0)))
             clips.append(blink)
         t += 4.0
 
@@ -439,7 +442,8 @@ def render_video(final_audio, timeline, total_duration,
                     text_color = "#4A4A4A"
                     font_size  = 16
 
-                txt_clip = (TextClip(text=disp_text, font_size=font_size, color=text_color, font=FONT_PATH)
+                txt_clip = (TextClip(text=disp_text, font_size=font_size, color=text_color, font=FONT_PATH,
+                                        size=(330, None), method="caption")
                             .with_start(p_start)
                             .with_duration(p_duration)
                             .with_position(lambda t, y=y_pos: (45, y)))
@@ -454,10 +458,10 @@ def render_video(final_audio, timeline, total_duration,
 
             if img_path and os.path.exists(img_path):
                 wipe_clip = (ImageClip(img_path)
-                             .resized(width=460)
+                             .resized(width=340)
                              .with_start(p_start)
                              .with_duration(p_duration)
-                             .with_position(lambda t: (450, 170)))
+                             .with_position(lambda t: (415, 170)))
                 clips.append(wipe_clip)
             else:
                 print(f"⚠️ ニュース{idx + 1}の画像なし。ワイプ表示をスキップします。")
