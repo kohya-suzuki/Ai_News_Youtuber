@@ -170,7 +170,7 @@ def parse_rows_to_data(rows):
         print("⚠️ L列（エール）が空のため、デフォルト文言を使用します。")
 
     # 冒頭挨拶2（動的部分）
-    intro_2 = f"本日{date_label}{day_of_week}曜日担当のAI、{ai_model}がお送り致します。"
+    intro_2 = f"本日{date_label}{day_of_week}曜日担当のエーアイ、{ai_model}がお送り致します。"
 
     # ニュースリスト（3行分）
     news_list = []
@@ -185,11 +185,12 @@ def parse_rows_to_data(rows):
         })
 
     # YouTube タイトル・説明欄用
-    youtube_title = (
-        f"【AIニュース】"
-        f"{news_list[0]['title'][:15]} 他{NEWS_COUNT - 1}本 "
-        f"【自動生成/{date_label}】"
-    )
+    # 日付から「○年○月○日」形式を生成
+    try:
+        youtube_date = f"{dt.year}年{dt.month}月{dt.day}日"
+    except Exception:
+        youtube_date = date_label
+    youtube_title = f"忙しい人のためのざっくりAIニュース {youtube_date}"
     summaries = "\n".join([f"・{n['summary']}" for n in news_list])
     source_urls = "\n".join([n["source_url"] for n in news_list if n["source_url"]])
     youtube_description = (
@@ -425,28 +426,39 @@ def render_video(final_audio, timeline, total_duration,
         clips.append(board_title)
 
         # 各ニュース期間ごとに見出しを動的切り替え
+        # y間隔120px・▷マーカーは別Clipに分離してはみ出し防止
+        ARROW_X  = 38   # ▷のx座標
+        TEXT_X   = 58   # タイトルテキストのx座標（▷の右隣）
+        TEXT_W   = 310  # タイトルテキストの折り返し幅（ボード内幅330 - ▷幅20）
+        Y_STEP   = 120  # ニュース間のy間隔
+
         for period in timeline:
             active_idx = period["index"]
             p_start    = period["start"]
             p_duration = period["end"] - period["start"]
 
             for text_idx, news in enumerate(data["news_list"]):
-                y_pos = (BOARD_Y + 90) + (text_idx * 75)
+                y_pos = (BOARD_Y + 90) + (text_idx * Y_STEP)
 
                 if text_idx == active_idx:
-                    disp_text  = f"▷ {news['title']}"
                     text_color = "#B22222"
                     font_size  = 18
+                    # ▷マーカーを独立したClipとして配置
+                    arrow_clip = (TextClip(text="▷", font_size=font_size, color=text_color, font=FONT_PATH)
+                                  .with_start(p_start)
+                                  .with_duration(p_duration)
+                                  .with_position(lambda t, y=y_pos: (ARROW_X, y)))
+                    clips.append(arrow_clip)
                 else:
-                    disp_text  = f"  {news['title']}"
                     text_color = "#4A4A4A"
                     font_size  = 16
 
-                txt_clip = (TextClip(text=disp_text, font_size=font_size, color=text_color, font=FONT_PATH,
-                                        size=(330, None), method="caption")
+                # タイトルテキスト（▷なし・折り返しあり）
+                txt_clip = (TextClip(text=news["title"], font_size=font_size, color=text_color, font=FONT_PATH,
+                                     size=(TEXT_W, None), method="caption")
                             .with_start(p_start)
                             .with_duration(p_duration)
-                            .with_position(lambda t, y=y_pos: (45, y)))
+                            .with_position(lambda t, y=y_pos: (TEXT_X, y)))
                 clips.append(txt_clip)
 
         # ── ⑤ 中央ワイプ画像（取得できた場合のみ表示） ──
