@@ -126,6 +126,73 @@ function generateDailyNewsScript() {
         ],
       ];
 
+      // ==========================================
+      // 第2呼び出し: script_full の検証・修正
+      // ① 冒頭挨拶の削除 ② 400文字超の場合は要約圧縮
+      // ==========================================
+      const verifyPayload = {
+        contents: [
+          {
+            parts: [
+              {
+                text:
+                  "以下のニュース台本テキストを2つのルールに従って修正し、修正後のテキストのみを出力してください。説明文・引用符・記号は不要です。\n\n" +
+                  "【ルール1】冒頭に「みなさん」「こんにちは」「はじめに」「皆さん」「どうも」「ようこそ」などの挨拶・導入文があれば削除してください。\n" +
+                  "【ルール2】400文字を超えている場合、ニュースの内容・文脈・重要な数字や固有名詞を維持しながら400文字以内に要約してください。\n" +
+                  "【ルール3】修正後のテキストのみを出力し、説明や前置きは一切加えないでください。\n\n" +
+                  "テキスト:\n" +
+                  newsData.script_full,
+              },
+            ],
+          },
+        ],
+      };
+
+      const verifyOptions = {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify(verifyPayload),
+        muteHttpExceptions: true,
+      };
+
+      Logger.log(
+        `[${i + 1}/${NEWS_COUNT}] script_full 検証・修正APIを呼び出し中...`,
+      );
+      Utilities.sleep(1000);
+
+      let verifiedScript = newsData.script_full; // デフォルトは元のテキスト
+      try {
+        const verifyResponse = UrlFetchApp.fetch(apiEndpoint, verifyOptions);
+        const verifyCode = verifyResponse.getResponseCode();
+        if (verifyCode === 200) {
+          const verifyResult = JSON.parse(verifyResponse.getContentText());
+          const verifiedText =
+            verifyResult.candidates[0].content.parts[0].text.trim();
+          if (verifiedText && verifiedText.length > 0) {
+            verifiedScript = verifiedText;
+            Logger.log(
+              `[${i + 1}/${NEWS_COUNT}] 検証完了。修正後文字数: ${verifiedScript.length}文字`,
+            );
+          } else {
+            Logger.log(
+              `[${i + 1}/${NEWS_COUNT}] 検証結果が空のため元のテキストを使用します。`,
+            );
+          }
+        } else {
+          Logger.log(
+            `[${i + 1}/${NEWS_COUNT}] 検証APIエラー (Code: ${verifyCode})。元のテキストを使用します。`,
+          );
+        }
+      } catch (verifyErr) {
+        Logger.log(
+          `[${i + 1}/${NEWS_COUNT}] 検証API例外: ${verifyErr.toString()}。元のテキストを使用します。`,
+        );
+      }
+
+      // 検証済みscript_fullで上書き
+      rowValues[0][3] = verifiedScript; // D列: 番組全台本
+      rowValues[0][8] = verifiedScript; // I列: 取得したニュース全文
+
       sheet.getRange(targetRow, 1, 1, 12).setValues(rowValues);
       SpreadsheetApp.flush();
 
@@ -134,7 +201,7 @@ function generateDailyNewsScript() {
       );
       successCount++;
 
-      // APIレート制限への配慮（1秒待機）
+      // APIレート制限への配慮（次のニュースへの待機）
       if (i < NEWS_COUNT - 1) {
         Utilities.sleep(1000);
       }
