@@ -1,0 +1,11 @@
+client*secrets.json
+token.json
+.env
+.env.example
+test_resources
+generate-movies/
+credentials/
+venv/
+**pycache**/
+*.pyc
+\_.log

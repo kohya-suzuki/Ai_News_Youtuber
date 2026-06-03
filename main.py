@@ -30,9 +30,10 @@ SCOPES = [
 
 # ディレクトリ・アセットの定義
 BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
+CREDENTIALS_DIR = os.path.join(BASE_DIR, "credentials")
 ROBOT_BASE_PATH = os.path.join(BASE_DIR, "images", "base_ai_robot.jpg")
-ROBOT_BLINK_PATH= os.path.join(BASE_DIR, "closed_eye.jpg")
-LIGHTBULB_PATH  = os.path.join(BASE_DIR, "lightbulb_icon.png")
+ROBOT_BLINK_PATH= os.path.join(BASE_DIR, "images", "closed_eye.jpg")
+LIGHTBULB_PATH  = os.path.join(BASE_DIR, "images", "lightbulb_icon.png")
 FONT_PATH       = os.path.join(BASE_DIR, "fonts", "HiraginoMaruGothic.ttc")
 
 # スプレッドシート設定
@@ -56,8 +57,9 @@ OUTRO_LINE      = "それでは、本日もいってらっしゃいませ。"
 def get_services():
     """YouTube API と Sheets API の両方を返す"""
     creds = None
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    token_path = os.path.join(CREDENTIALS_DIR, "token.json")
+    if os.path.exists(token_path):
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
@@ -65,9 +67,11 @@ def get_services():
             creds.refresh(Request())
         else:
             print("🔑 初回認証を開始します。ブラウザで承認を行ってください...")
-            flow = InstalledAppFlow.from_client_secrets_file("client_secrets.json", SCOPES)
+            secrets_path = os.path.join(CREDENTIALS_DIR, "client_secrets.json")
+            flow = InstalledAppFlow.from_client_secrets_file(secrets_path, SCOPES)
             creds = flow.run_local_server(port=0)
-        with open("token.json", "w") as token:
+        os.makedirs(CREDENTIALS_DIR, exist_ok=True)
+        with open(token_path, "w") as token:
             token.write(creds.to_json())
 
     youtube = build("youtube", "v3", credentials=creds)

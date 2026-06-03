@@ -1,3 +1,11 @@
 client_secrets.json
 token.json
 .env
+.env.example
+test_resources
+generate-movies/
+credentials/
+venv/
+__pycache__/
+*.pyc
+*.log
